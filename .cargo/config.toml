@@ -1,0 +1,4 @@
+# NDK r27d — без этого cargo берёт mingw cc и падает на --eh-frame-hdr
+[target.aarch64-linux-android]
+linker = "C:\\path_apps\\android-ndk-r27d\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\aarch64-linux-android24-clang.cmd"
+ar = "C:\\path_apps\\android-ndk-r27d\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe"

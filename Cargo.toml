@@ -1,0 +1,8 @@
+[package]
+name = "simple-android-info"
+version = "0.1.0"
+edition = "2024"
+description = "Lightweight Android device info and interface status probe"
+readme = "README.md"
+
+[dependencies]
