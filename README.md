@@ -2,122 +2,151 @@
 
 [English](README.en.md)
 
-Небольшая утилита для Android: показывает, **что за устройство**, и проверяет, **какие интерфейсы реально работают** (дисплей, сеть, тач, камера и т.д.).
+Утилита для Android (телефон / TV / приставка): **подробный отчёт bring-up** после пайки или прошивки — что поднялось, что нет. Root не нужен.
 
-Работает на телефонах, Android TV и приставках. Root не нужен.
+Готовые бинарники в [`bin/`](bin/) — для обычного использования **собирать не обязательно**.
 
-Готовый бинарник лежит в [`bin/`](bin/) — для обычного использования **собирать проект не обязательно**.
+| Файл | ABI | Устройства |
+|------|-----|------------|
+| [`bin/simple-android-info-aarch64`](bin/simple-android-info-aarch64) | `arm64-v8a` | большинство телефонов / TV (64-bit) |
+| [`bin/simple-android-info-armeabi-v7a`](bin/simple-android-info-armeabi-v7a) | `armeabi-v7a` | старые / 32-bit приставки |
+
+```powershell
+adb shell getprop ro.product.cpu.abi
+```
 
 ---
 
-## Использование (готовая сборка)
+## Использование
 
-Нужны только `adb` и устройство с USB-отладкой.
+Нужны `adb` и USB-отладка. Запуск только из `/data/local/tmp/` (`/sdcard` и `/storage` часто `noexec`).
 
 ```powershell
-adb push bin\simple-android-info /data/local/tmp/
+# 64-bit
+adb push bin\simple-android-info-aarch64 /data/local/tmp/simple-android-info
+# 32-bit
+# adb push bin\simple-android-info-armeabi-v7a /data/local/tmp/simple-android-info
+
 adb shell chmod 755 /data/local/tmp/simple-android-info
 adb shell /data/local/tmp/simple-android-info
 ```
 
-Если после `push` пишет `Permission denied` — выполните `chmod`.
+Если после `push` — `Permission denied`, сделайте `chmod`.  
+Если файл есть в `ls`, но shell пишет `No such file or directory` — **неверный ABI** (нет `linker64` на 32-bit).
 
 ### Режимы
 
 | Команда | Результат |
 |---------|-----------|
-| `simple-android-info` | сводка + проверка интерфейсов (класс auto) |
+| `simple-android-info` | подробный отчёт по каждому пункту |
+| `--lang=ru` / `--lang=en` | то же + пояснения (что / где / зачем); синоним `--explain=` |
 | `--summary` / `-s` | только сводная таблица |
-| `--class=phone` / `tv` / `box` | полный режим с принудительным классом |
+| `--smt` | алиас основного режима |
+| `--class=phone` / `tv` / `box` | принудительный класс |
 | `--class=summary` | то же, что `--summary` |
-| `--json` / `-j` | вывод в JSON |
-| `-v` / `--verbose` | плюс список шин (I2C, SPI, сеть…) |
-
-Флаги можно сочетать.
+| `--json` / `-j` | JSON |
+| `-v` / `--verbose` | плюс инвентарь шин (I2C, SPI, net…) |
 
 ```powershell
 adb shell /data/local/tmp/simple-android-info
+adb shell /data/local/tmp/simple-android-info --lang=ru
+adb shell /data/local/tmp/simple-android-info --lang=en
 adb shell /data/local/tmp/simple-android-info --summary
-adb shell /data/local/tmp/simple-android-info --summary --json
+adb shell /data/local/tmp/simple-android-info --json --lang=ru
 adb shell /data/local/tmp/simple-android-info --class=tv
-adb shell /data/local/tmp/simple-android-info --json -v
 ```
 
 ### Код выхода
 
 | Код | Когда |
 |-----|--------|
-| `0` | всё ок (в `--summary` всегда `0`) |
-| `1` | есть обязательный FAIL в проверках |
+| `0` | нет обязательных FAIL (`--summary` всегда `0`) |
+| `1` | есть FAIL |
 | `2` | неверный аргумент |
 
 ---
 
 ## Как читать вывод
 
-### Сводная таблица (SUMMARY)
+По умолчанию печатается шапка (модель, serial, Android) и блоки:
 
-| Поле | Простыми словами |
-|------|------------------|
-| `class` | тип: телефон / TV / приставка |
-| `product` | производитель и модель |
-| `device` | внутреннее имя |
-| `android` / `build` | версия системы и сборка |
-| `soc` / `platform` | чипсет |
-| `cpu` / `cpu_freq` | ядра и частоты по кластерам |
-| `ram` / `ddr_*` | оперативка и DDR (если доступно) |
-| `gpu` | графика |
-| `display` / `refresh` | разрешение и герцовки |
-| `storage` | накопитель (eMMC / UFS) |
-| `network` | Wi‑Fi, Ethernet, модем, BT |
-| `buses` | сколько устройств на I2C / SPI / input |
-| `features` | найденные возможности (touch, camera…) |
+```text
+[PASS|FAIL|SKIP] <имя>
+  …факты…
+  ———                    # только с --lang=
+  что / где / зачем      # или what / where / why
+```
 
-`n/a` — система не отдала значение (часто без root: тип памяти, частота GPU).
+В конце: `RESULT: PASS|FAIL`.
 
-### Проверки интерфейсов (INTERFACE CHECKS)
+### Пункты DEVICE CHECKS
 
-| Статус | Значение |
-|--------|----------|
-| **PASS** | нашлось, выглядит живым |
-| **FAIL** | для этого типа ожидалось, но нет → код выхода `1` |
-| **SKIP** | для этого типа не обязательно |
+| Пункт | Смысл |
+|-------|--------|
+| `boot_completed` | Android userspace загрузился |
+| `verified_boot` | AVB / vbmeta (green/yellow/…) |
+| `nvram` | заводская NVRAM / калибровки Ready (MTK и аналоги) |
+| `storage` | eMMC/UFS виден ядру |
+| `data_mounted` | `/data` смонтирован, есть размер |
+| `display` | DRM + разрешение + SurfaceFlinger |
+| `gpu` | EGL/GPU |
+| `audio` | ALSA card / audioserver |
+| `wlan` | интерфейс + wificond |
+| `ethernet` | eth (TV/box, если нет Wi‑Fi) |
+| `bluetooth` | BT контроллер |
+| `touch` | тач (phone) |
+| `battery_charger` | power_supply / зарядка (phone) |
+| `camera` | число камер HAL |
+| `sensors` | SensorService / IIO |
+| `modem_baseband` | baseband + modem iface |
+| `gnss` | GPS/mnld /dev |
+| `hdmi` | HDMI/DRM (TV/box) |
+| `usb` | gadget ADB/MTP + UDC |
+| `surfaceflinger` | композитор |
+| `identity` | serial, SoC, CPU, RAM, uptime… |
 
-| Проверка | Телефон | TV / приставка |
-|----------|:-------:|:--------------:|
-| Накопитель, дисплей, GPU, звук, сеть, BT, SurfaceFlinger | да | да |
-| Панель DSI, тач, модем, камера, зарядка, GNSS | да | нет |
-| HDMI / внешний дисплей | нет | да |
-| Ethernet | нет | да, если нет Wi‑Fi |
+**SKIP** — пункт не обязателен для этого класса устройства.  
+Заводской Wi‑Fi MAC обычно недоступен без root — поле `wlan_mac` часто `n/a`.
 
-Строки `info_*` на FAIL не влияют.  
-В конце: `summary: N pass, M fail, K skip`.  
-С `-v` печатается инвентарь шин.
+### Сводная таблица (`--summary`)
+
+| Поле | Смысл |
+|------|--------|
+| `class` | phone / tv / box / unknown |
+| `product` / `device` / `serial` / `hardware` | идентификация |
+| `android` / `build` / `boot` | ОС, сборка, slot/vbmeta |
+| `soc` / `platform` / `cpu*` / `ram` | железо |
+| `gpu` / `display` / `refresh` | графика и экран |
+| `storage` / `data` | накопитель и `/data` |
+| `network` / `wlan_mac` | сети (MAC часто закрыт) |
+| `timezone` / `uptime` | пояс и аптайм |
+| `buses` / `features` | шины и возможности |
 
 ### JSON
 
 ```powershell
-adb shell /data/local/tmp/simple-android-info --summary --json > info.json
+adb shell /data/local/tmp/simple-android-info --json --lang=ru > report.json
+adb shell /data/local/tmp/simple-android-info --summary --json > summary.json
 ```
 
-Полный прогон отдаёт объект с полями `mode`, `summary`, `checks` (и `inventory` при `-v`).  
-`status` в checks: `pass` | `fail` | `skip`.
+Полный прогон: `mode` (`report`), `summary`, `checks`, `result` (`PASS`/`FAIL`); при `-v` — `inventory`.  
+В `checks.items[]`: `name`, `status`, `detail`; при `--lang=` ещё `explain.{what,where,why}`.
 
 ### Класс устройства (auto)
 
 1. Похоже на TV → `tv`
-2. Есть модем → `phone`
+2. Есть модем / telephony → `phone`
 3. Нет модема, есть сеть / HDMI → `box`
-4. Иначе → `unknown`
+4. Иначе → `unknown` (чеклист всё равно дожимает phone-профиль по железу)
 
 ---
 
 ## Сборка из исходников
 
-Нужны: Rust, Android NDK, `adb` (для проверки на устройстве).
+Нужны: Rust, Android NDK, `adb`.
 
 ```powershell
-rustup target add aarch64-linux-android
+rustup target add aarch64-linux-android armv7-linux-androideabi
 ```
 
 В [`.cargo/config.toml`](.cargo/config.toml) укажите linker из своего NDK:
@@ -126,27 +155,29 @@ rustup target add aarch64-linux-android
 [target.aarch64-linux-android]
 linker = "C:\\path\\to\\ndk\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\aarch64-linux-android24-clang.cmd"
 ar     = "C:\\path\\to\\ndk\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe"
-```
 
-Сборка и обновление `bin/`:
+[target.armv7-linux-androideabi]
+linker = "C:\\path\\to\\ndk\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\armv7a-linux-androideabi24-clang.cmd"
+ar     = "C:\\path\\to\\ndk\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin\\llvm-ar.exe"
+```
 
 ```powershell
 cargo build --release --target aarch64-linux-android
+cargo build --release --target armv7-linux-androideabi
 New-Item -ItemType Directory -Force bin | Out-Null
-Copy-Item -Force target\aarch64-linux-android\release\simple-android-info bin\simple-android-info
+Copy-Item -Force target\aarch64-linux-android\release\simple-android-info bin\simple-android-info-aarch64
+Copy-Item -Force target\armv7-linux-androideabi\release\simple-android-info bin\simple-android-info-armeabi-v7a
 ```
 
-После этого используйте бинарник из `bin/`, как в разделе «Использование».
-
-Каталог `target/` в git не хранится — только исходники и готовый файл в `bin/`.
+`target/` в git не хранится — только исходники и файлы в `bin/`.
 
 ---
 
 ## Ограничения
 
 - Нужен загруженный Android и `adb`.
-- Без root часть данных закрыта (часто частота GPU, тип DDR).
-- Имена узлов зависят от вендора (типичные Unisoc / Qualcomm / MediaTek покрыты).
+- Без root закрыты часть sysfs (часто Wi‑Fi MAC, частота GPU).
+- Имена узлов зависят от вендора (MediaTek / Amlogic / типичные паттерны покрыты).
 
 ```text
 simple-android-info --help
